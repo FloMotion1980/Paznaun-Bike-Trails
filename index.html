@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>Paznaun Bike Trails</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
@@ -168,11 +168,11 @@
   #baseLayerControl .chip{ font-size:11.5px; padding:4px 9px; }
 
   #locateBtn{
-    position:absolute; bottom:16px; right:16px; z-index:1000;
+    display:none; position:absolute; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); right:16px; z-index:1000;
     width:46px; height:46px; border-radius:50%;
     background: rgba(255,255,255,0.97); border:1px solid #d8ddd0;
     box-shadow: 0 3px 10px rgba(0,0,0,0.2);
-    font-size:22px; display:flex; align-items:center; justify-content:center;
+    font-size:22px; align-items:center; justify-content:center;
     cursor:pointer;
   }
   #locateBtn:hover{ background:#f5f7ef; }
@@ -211,10 +211,14 @@
   #fatalError code{ background:#f3e6da; padding:1px 5px; border-radius:4px; font-size:12px; }
   @media (max-width: 768px){
     #infoPanel{
-      top:auto; bottom:16px; left:50%; right:auto;
+      top:auto; bottom: calc(16px + env(safe-area-inset-bottom, 0px) + 54px); left:50%; right:auto;
       transform: translateX(-50%);
       width:max-content; max-width:min(92vw, 360px);
       max-height:min(30vh, 220px);
+    }
+    #locateBtn{
+      display:flex;
+      bottom: calc(16px + env(safe-area-inset-bottom, 0px) + 54px);
     }
   }
 </style>
@@ -432,6 +436,7 @@ const geoIcon = L.divIcon({
 let userLocationMarker = null;
 let userAccuracyCircle = null;
 let geoWatchId = null;
+let followMode = false;
 const locateBtn = document.getElementById("locateBtn");
 
 function updateUserLocation(pos, isFirstFix){
@@ -464,32 +469,63 @@ function updateUserLocation(pos, isFirstFix){
     }
   }
   if (isFirstFix) map.flyTo(latlng, 15, { duration: 0.8 });
+  else if (followMode) map.panTo(latlng, { animate: true, duration: 0.5 });
 }
 
-locateBtn.addEventListener("click", () => {
+let wakeLock = null;
+async function acquireWakeLock(){
+  if (!("wakeLock" in navigator)) return;
+  try {
+    wakeLock = await navigator.wakeLock.request("screen");
+    wakeLock.addEventListener("release", () => { wakeLock = null; });
+  } catch (err) {
+    console.warn("Wake Lock nicht verfügbar:", err);
+  }
+}
+function releaseWakeLock(){
+  if (wakeLock) { wakeLock.release(); wakeLock = null; }
+}
+document.addEventListener("visibilitychange", () => {
+  if (followMode && document.visibilityState === "visible" && wakeLock === null) {
+    acquireWakeLock();
+  }
+});
+
+function startFollowing(){
   if (!navigator.geolocation) {
     layerWarningEl.textContent = "Dieser Browser unterstützt keine Standortabfrage.";
     layerWarningEl.classList.add("visible");
     return;
   }
-  if (geoWatchId !== null) {
-    // already tracking — just recenter on the last known position
-    if (userLocationMarker) map.flyTo(userLocationMarker.getLatLng(), 15, { duration: 0.8 });
-    return;
-  }
+  followMode = true;
   locateBtn.classList.add("active");
+  locateBtn.title = "Folgen beenden";
+  acquireWakeLock();
   let firstFix = true;
   geoWatchId = navigator.geolocation.watchPosition(
     (pos) => { updateUserLocation(pos, firstFix); firstFix = false; },
     (err) => {
-      locateBtn.classList.remove("active");
-      geoWatchId = null;
+      stopFollowing();
       layerWarningEl.textContent = "Standort nicht verfügbar: " + err.message;
       layerWarningEl.classList.add("visible");
     },
     { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
   );
+}
+
+function stopFollowing(){
+  followMode = false;
+  locateBtn.classList.remove("active");
+  locateBtn.title = "Mein Standort";
+  if (geoWatchId !== null) { navigator.geolocation.clearWatch(geoWatchId); geoWatchId = null; }
+  releaseWakeLock();
+}
+
+locateBtn.addEventListener("click", () => {
+  if (followMode) stopFollowing();
+  else startFollowing();
 });
+
 
 // ---- Permanent place labels (Ischgl, Samnaun, Galtür) — always visible, independent of zoom ----
 const PLACES = [
@@ -528,6 +564,7 @@ function applySolo(id){
       layer.startDot.setStyle({ opacity: SOLO_DIM_OPACITY, fillOpacity: SOLO_DIM_OPACITY });
       layer.startMarker.setStyle({ opacity: SOLO_DIM_OPACITY, fillOpacity: SOLO_DIM_OPACITY });
       layer.endMarker.setStyle({ opacity: SOLO_DIM_OPACITY, fillOpacity: SOLO_DIM_OPACITY });
+      layer.line.closeTooltip();
     }
   });
   soloId = id;
@@ -540,6 +577,7 @@ function clearSolo(){
     layer.endMarker.setStyle({ opacity:1, fillOpacity:1 });
   });
   soloId = null;
+  applyNameLabels();
 }
 
 ipContent.addEventListener("click", (e) => {
@@ -672,6 +710,20 @@ function selectCardFor(id){
   selectTrail(id, layer ? layer.card : null);
 }
 
+function getFlyPadding(){
+  if (window.innerWidth <= 768) {
+    // mobile: info panel + locate button sit near the bottom, sidebar is an overlay (closed)
+    return { paddingTopLeft: L.point(20, 70), paddingBottomRight: L.point(20, 240) };
+  }
+  // desktop: info panel sits top-right
+  return { paddingTopLeft: L.point(40, 80), paddingBottomRight: L.point(340, 40) };
+}
+
+function flyToTrailBounds(bounds){
+  const pad = getFlyPadding();
+  map.flyToBounds(bounds, { paddingTopLeft: pad.paddingTopLeft, paddingBottomRight: pad.paddingBottomRight, duration:0.6 });
+}
+
 function render(){
   listEl.innerHTML = "";
   let shown = 0, total = 0;
@@ -710,7 +762,7 @@ function render(){
         <div class="trail-meta"><span>${t.len} km</span><span>${t.up} m ↑ / ${t.down} m ↓</span></div>`;
       card.addEventListener("click", () => {
         if (!layer) return;
-        map.flyToBounds(layer.bounds, { padding:[60,320], duration:0.6 });
+        flyToTrailBounds(layer.bounds);
         showTrailInfo(t);
         selectTrail(t.id, card);
         closeSidebarIfMobile();
