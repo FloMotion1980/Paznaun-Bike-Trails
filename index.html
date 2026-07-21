@@ -187,8 +187,27 @@
   .geo-dot{
     position:absolute; left:50%; top:50%; width:16px; height:16px;
     margin:-8px 0 0 -8px; background:#1a73e8; border:3px solid #fff; border-radius:50%;
-    box-shadow: 0 0 4px rgba(0,0,0,0.5);
+    box-shadow: 0 0 4px rgba(0,0,0,0.5); z-index:2;
   }
+  .geo-pulse{
+    position:absolute; left:50%; top:50%; width:16px; height:16px;
+    margin:-8px 0 0 -8px; border-radius:50%; background:#1a73e8; opacity:0;
+  }
+  .geo-wrap.live .geo-pulse{ animation: geoPulse 1.8s ease-out infinite; }
+  @keyframes geoPulse{
+    0%   { transform: scale(1);   opacity:0.55; }
+    100% { transform: scale(3.2); opacity:0; }
+  }
+  #liveStatus{
+    display:none; position:absolute; top:16px; left:50%; transform:translateX(-50%); z-index:1500;
+    background: rgba(28,38,32,0.92); color:#f2f3ec; font-family: Arial, sans-serif; font-size:12.5px; font-weight:600;
+    padding:6px 14px; border-radius:16px; box-shadow:0 3px 10px rgba(0,0,0,0.25); align-items:center; gap:6px;
+  }
+  #liveStatus.visible{ display:flex; }
+  #liveStatus .rec-dot{
+    width:8px; height:8px; border-radius:50%; background:#e0392b; animation: recBlink 1.2s ease-in-out infinite;
+  }
+  @keyframes recBlink{ 0%,100%{ opacity:1; } 50%{ opacity:0.25; } }
   #layerWarning{
     position:absolute; bottom:16px; left:16px; z-index:1000;
     background: rgba(28,38,32,0.92); color:#f2f3ec; font-family: Arial, sans-serif; font-size: 12px;
@@ -268,6 +287,7 @@
         <button class="chip" data-layer="sat">Satellit</button>
       </div>
       <button id="locateBtn" title="Mein Standort">📍</button>
+      <div id="liveStatus"><span class="rec-dot"></span> Live-Tracking</div>
       <div id="infoPanel">
         <button class="ip-close" id="ipClose" title="Schließen">&times;</button>
         <div id="ipContent"></div>
@@ -430,7 +450,7 @@ watchLayer(baseLayers.carto, "Straße hell (CARTO)");
 
 // ---- My Location (blue dot, accuracy ring, heading cone) ----
 const geoIcon = L.divIcon({
-  html: '<div class="geo-wrap"><div class="geo-cone" style="display:none;"></div><div class="geo-dot"></div></div>',
+  html: '<div class="geo-wrap"><div class="geo-cone" style="display:none;"></div><div class="geo-pulse"></div><div class="geo-dot"></div></div>',
   className: "", iconSize: [40, 40], iconAnchor: [20, 20]
 });
 let userLocationMarker = null;
@@ -438,6 +458,70 @@ let userAccuracyCircle = null;
 let geoWatchId = null;
 let followMode = false;
 const locateBtn = document.getElementById("locateBtn");
+
+let compassActive = false;
+let smoothedCompassHeading = null;
+let orientationHandler = null;
+
+function updateHeadingCone(headingDeg){
+  if (!userLocationMarker) return;
+  const el = userLocationMarker.getElement();
+  if (!el) return;
+  const wrap = el.querySelector(".geo-wrap");
+  const cone = el.querySelector(".geo-cone");
+  cone.style.display = "block";
+  wrap.style.transform = `rotate(${headingDeg}deg)`;
+}
+
+function handleOrientation(event){
+  let heading = null;
+  if (typeof event.webkitCompassHeading === "number" && !isNaN(event.webkitCompassHeading)) {
+    heading = event.webkitCompassHeading; // iOS Safari: already 0° = North, clockwise
+  } else if (event.absolute && event.alpha !== null && event.alpha !== undefined) {
+    heading = 360 - event.alpha; // Android absolute orientation: alpha is counter-clockwise from North
+  }
+  if (heading === null || isNaN(heading)) return;
+  heading = (heading + 360) % 360;
+
+  if (smoothedCompassHeading === null) {
+    smoothedCompassHeading = heading;
+  } else {
+    // shortest signed angular difference, so it doesn't spin the long way around at the 0°/360° seam
+    const diff = ((heading - smoothedCompassHeading + 540) % 360) - 180;
+    smoothedCompassHeading = (smoothedCompassHeading + diff * 0.2 + 360) % 360;
+  }
+  compassActive = true;
+  updateHeadingCone(smoothedCompassHeading);
+}
+
+function attachOrientationListener(){
+  orientationHandler = handleOrientation;
+  if ("ondeviceorientationabsolute" in window) {
+    window.addEventListener("deviceorientationabsolute", orientationHandler);
+  } else {
+    window.addEventListener("deviceorientation", orientationHandler);
+  }
+}
+
+function requestOrientationPermission(){
+  if (typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function") {
+    DeviceOrientationEvent.requestPermission()
+      .then((state) => { if (state === "granted") attachOrientationListener(); })
+      .catch((err) => console.warn("Kompass-Berechtigung nicht erteilt:", err));
+  } else if (window.DeviceOrientationEvent) {
+    attachOrientationListener();
+  }
+}
+
+function detachOrientationListener(){
+  if (orientationHandler) {
+    window.removeEventListener("deviceorientationabsolute", orientationHandler);
+    window.removeEventListener("deviceorientation", orientationHandler);
+    orientationHandler = null;
+  }
+  compassActive = false;
+  smoothedCompassHeading = null;
+}
 
 function updateUserLocation(pos, isFirstFix){
   const { latitude, longitude, accuracy, heading } = pos.coords;
@@ -460,12 +544,16 @@ function updateUserLocation(pos, isFirstFix){
   const el = userLocationMarker.getElement();
   if (el) {
     const wrap = el.querySelector(".geo-wrap");
-    const cone = el.querySelector(".geo-cone");
+    wrap.classList.toggle("live", followMode);
+  }
+  // Compass (if available) drives the cone continuously, including while stationary.
+  // GPS course-over-ground is only used as a fallback when no compass reading exists yet.
+  if (!compassActive) {
     if (heading !== null && heading !== undefined && !isNaN(heading)) {
-      cone.style.display = "block";
-      wrap.style.transform = `rotate(${heading}deg)`;
-    } else {
-      cone.style.display = "none";
+      updateHeadingCone(heading);
+    } else if (userLocationMarker.getElement()) {
+      const cone = userLocationMarker.getElement().querySelector(".geo-cone");
+      if (cone) cone.style.display = "none";
     }
   }
   if (isFirstFix) map.flyTo(latlng, 15, { duration: 0.8 });
@@ -491,6 +579,8 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 
+const liveStatusEl = document.getElementById("liveStatus");
+
 function startFollowing(){
   if (!navigator.geolocation) {
     layerWarningEl.textContent = "Dieser Browser unterstützt keine Standortabfrage.";
@@ -500,7 +590,9 @@ function startFollowing(){
   followMode = true;
   locateBtn.classList.add("active");
   locateBtn.title = "Folgen beenden";
+  liveStatusEl.classList.add("visible");
   acquireWakeLock();
+  requestOrientationPermission();
   let firstFix = true;
   geoWatchId = navigator.geolocation.watchPosition(
     (pos) => { updateUserLocation(pos, firstFix); firstFix = false; },
@@ -517,7 +609,13 @@ function stopFollowing(){
   followMode = false;
   locateBtn.classList.remove("active");
   locateBtn.title = "Mein Standort";
+  liveStatusEl.classList.remove("visible");
+  if (userLocationMarker) {
+    const el = userLocationMarker.getElement();
+    if (el) { const wrap = el.querySelector(".geo-wrap"); if (wrap) wrap.classList.remove("live"); }
+  }
   if (geoWatchId !== null) { navigator.geolocation.clearWatch(geoWatchId); geoWatchId = null; }
+  detachOrientationListener();
   releaseWakeLock();
 }
 
