@@ -207,6 +207,7 @@
     padding:6px 14px; border-radius:16px; box-shadow:0 3px 10px rgba(0,0,0,0.25); align-items:center; gap:6px;
   }
   #liveStatus.visible{ display:flex; }
+  #headingDebug{ font-weight:400; color:#c7d0c4; font-family: monospace; font-size:11px; }
   #liveStatus .rec-dot{
     width:8px; height:8px; border-radius:50%; background:#e0392b; animation: recBlink 1.2s ease-in-out infinite;
   }
@@ -286,7 +287,7 @@
         <button class="chip" data-layer="sat">Satellit</button>
       </div>
       <button id="locateBtn" title="Mein Standort">📍</button>
-      <div id="liveStatus"><span class="rec-dot"></span> Live-Tracking</div>
+      <div id="liveStatus"><span class="rec-dot"></span> Live-Tracking <span id="headingDebug"></span></div>
       <div id="infoPanel">
         <button class="ip-close" id="ipClose" title="Schließen">&times;</button>
         <div id="ipContent"></div>
@@ -496,6 +497,12 @@ function handleOrientation(event){
   }
   compassActive = true;
   updateHeadingCone(compassDisplayAngle);
+
+  const dbg = document.getElementById("headingDebug");
+  if (dbg) {
+    const mod = ((compassDisplayAngle % 360) + 360) % 360;
+    dbg.textContent = `(gerendert: ${compassDisplayAngle.toFixed(1)}° · effektiv: ${mod.toFixed(1)}°)`;
+  }
 }
 
 function attachOrientationListener(){
@@ -523,6 +530,8 @@ function detachOrientationListener(){
     window.removeEventListener("deviceorientation", orientationHandler);
     orientationHandler = null;
   }
+  const dbg = document.getElementById("headingDebug");
+  if (dbg) dbg.textContent = "";
   compassActive = false;
   smoothedCompassHeading = null;
   compassDisplayAngle = null;
