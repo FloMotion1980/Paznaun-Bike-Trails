@@ -51,7 +51,7 @@
   #sidebarBackdrop{ display:none; position:fixed; inset:0; background:rgba(15,20,16,0.45); z-index:2400; }
   #sidebarBackdrop.visible{ display:block; }
 
-  @media (max-width: 768px){
+  @media (max-width: 768px), (pointer: coarse){
     aside{
       position: fixed; top:0; left:0; bottom:0;
       width: min(88vw, 340px); min-width:0;
@@ -182,10 +182,11 @@
   #locateBtn.active{ background: var(--forest); }
   .geo-wrap{ position:relative; width:40px; height:40px; }
   .geo-cone{
-    position:absolute; left:50%; top:50%; width:0; height:0;
-    margin-top: -11px;
-    border-left:13px solid transparent; border-right:13px solid transparent;
-    border-top:32px solid rgba(26,115,232,0.35);
+    position:absolute; left:50%; top:50%;
+    width:26px; height:34px;
+    margin-left:-13px; margin-top:-34px;
+    clip-path: polygon(50% 100%, 0% 0%, 100% 0%);
+    background: rgba(26,115,232,0.35);
   }
   .geo-dot{
     position:absolute; left:50%; top:50%; width:16px; height:16px;
@@ -207,7 +208,6 @@
     padding:6px 14px; border-radius:16px; box-shadow:0 3px 10px rgba(0,0,0,0.25); align-items:center; gap:6px;
   }
   #liveStatus.visible{ display:flex; }
-  #headingDebug{ font-weight:400; color:#c7d0c4; font-family: monospace; font-size:11px; }
   #liveStatus .rec-dot{
     width:8px; height:8px; border-radius:50%; background:#e0392b; animation: recBlink 1.2s ease-in-out infinite;
   }
@@ -232,7 +232,7 @@
   #fatalError h2{ margin:0 0 10px; color:var(--rust); font-size:16px; }
   #fatalError p{ margin:0 0 8px; font-size:13.5px; line-height:1.5; color:var(--ink); }
   #fatalError code{ background:#f3e6da; padding:1px 5px; border-radius:4px; font-size:12px; }
-  @media (max-width: 768px){
+  @media (max-width: 768px), (pointer: coarse){
     #infoPanel{
       top:auto; bottom: calc(16px + env(safe-area-inset-bottom, 0px) + 54px); left:50%; right:auto;
       transform: translateX(-50%);
@@ -287,7 +287,7 @@
         <button class="chip" data-layer="sat">Satellit</button>
       </div>
       <button id="locateBtn" title="Mein Standort">📍</button>
-      <div id="liveStatus"><span class="rec-dot"></span> Live-Tracking <span id="headingDebug"></span></div>
+      <div id="liveStatus"><span class="rec-dot"></span> Live-Tracking</div>
       <div id="infoPanel">
         <button class="ip-close" id="ipClose" title="Schließen">&times;</button>
         <div id="ipContent"></div>
@@ -396,8 +396,12 @@ sidebarToggleBtn.addEventListener('click', () => {
 });
 sidebarBackdrop.addEventListener('click', closeSidebar);
 
+function isMobileLayout(){
+  return window.innerWidth <= 768 || window.matchMedia("(pointer: coarse)").matches;
+}
+
 function closeSidebarIfMobile(){
-  if (window.innerWidth <= 768) closeSidebar();
+  if (isMobileLayout()) closeSidebar();
 }
 
 const map = L.map('map', { scrollWheelZoom:true, zoomControl:false }).setView([46.99, 10.29], 12);
@@ -497,12 +501,6 @@ function handleOrientation(event){
   }
   compassActive = true;
   updateHeadingCone(compassDisplayAngle);
-
-  const dbg = document.getElementById("headingDebug");
-  if (dbg) {
-    const mod = ((compassDisplayAngle % 360) + 360) % 360;
-    dbg.textContent = `(gerendert: ${compassDisplayAngle.toFixed(1)}° · effektiv: ${mod.toFixed(1)}°)`;
-  }
 }
 
 function attachOrientationListener(){
@@ -530,8 +528,6 @@ function detachOrientationListener(){
     window.removeEventListener("deviceorientation", orientationHandler);
     orientationHandler = null;
   }
-  const dbg = document.getElementById("headingDebug");
-  if (dbg) dbg.textContent = "";
   compassActive = false;
   smoothedCompassHeading = null;
   compassDisplayAngle = null;
@@ -876,7 +872,7 @@ function selectCardFor(id){
 }
 
 function getFlyPadding(){
-  if (window.innerWidth <= 768) {
+  if (isMobileLayout()) {
     // mobile: info panel + locate button sit near the bottom, sidebar is an overlay (closed)
     return { paddingTopLeft: L.point(20, 70), paddingBottomRight: L.point(20, 240) };
   }
