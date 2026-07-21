@@ -35,7 +35,6 @@
   }
   .app{ display:flex; flex-direction:column; height:100vh; }
   header{ padding: 14px 22px 12px; background: var(--forest-dark); color: #f2f3ec;
-    position: relative; z-index: 3000;
     display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; border-bottom: 3px solid var(--rust); }
   header h1{ font-family: 'Copperplate','Trebuchet MS',sans-serif; letter-spacing: 1.5px; font-size: 20px; margin:0; text-transform: uppercase; }
   header .sub{ font-family: Arial, sans-serif; font-size: 12.5px; color: #b9c6b6; }
@@ -136,6 +135,10 @@
     font-size:11.5px; padding:4px 10px; border-radius:14px;
   }
   #infoPanel .ip-trail .ip-link:hover{ background: var(--rust-light); }
+  #infoPanel .ip-trail .gpx-download-btn{
+    background: var(--forest); font-size:10.5px; padding:3px 8px; border:none; cursor:pointer; font-family:Arial, sans-serif;
+  }
+  #infoPanel .ip-trail .gpx-download-btn:hover{ background: var(--forest-dark); }
   #infoPanel .ip-trail .solo-btn{
     display:inline-flex; align-items:center; justify-content:center;
     width:22px; height:22px; margin-left:4px; vertical-align:middle;
@@ -204,6 +207,7 @@
     padding:6px 14px; border-radius:16px; box-shadow:0 3px 10px rgba(0,0,0,0.25); align-items:center; gap:6px;
   }
   #liveStatus.visible{ display:flex; }
+  #headingDebug{ font-weight:400; color:#c7d0c4; font-family: monospace; font-size:11px; }
   #liveStatus .rec-dot{
     width:8px; height:8px; border-radius:50%; background:#e0392b; animation: recBlink 1.2s ease-in-out infinite;
   }
@@ -272,10 +276,6 @@
       </div>
       <div class="count-line" id="countLine"></div>
       <div class="trail-list" id="trailList"></div>
-      <div class="approx-note">
-        <span class="tag-geo">GPX</span> = echter Streckenverlauf aus offizieller GPX-Datei.
-        Klick auf einen Trail zeigt Details rechts auf der Karte. Kartenebene (Relief/Satellit/Straße) rechts oben umschaltbar.
-      </div>
     </aside>
     <div class="map-wrap">
       <div id="map"></div>
@@ -287,7 +287,7 @@
         <button class="chip" data-layer="sat">Satellit</button>
       </div>
       <button id="locateBtn" title="Mein Standort">📍</button>
-      <div id="liveStatus"><span class="rec-dot"></span> Live-Tracking</div>
+      <div id="liveStatus"><span class="rec-dot"></span> Live-Tracking <span id="headingDebug"></span></div>
       <div id="infoPanel">
         <button class="ip-close" id="ipClose" title="Schließen">&times;</button>
         <div id="ipContent"></div>
@@ -460,7 +460,8 @@ let followMode = false;
 const locateBtn = document.getElementById("locateBtn");
 
 let compassActive = false;
-let smoothedCompassHeading = null;
+let smoothedCompassHeading = null; // normalized 0-360, used only for computing the shortest-path delta
+let compassDisplayAngle = null;    // unbounded, ever-increasing/decreasing — this is what we actually render
 let orientationHandler = null;
 
 function updateHeadingCone(headingDeg){
@@ -485,13 +486,20 @@ function handleOrientation(event){
 
   if (smoothedCompassHeading === null) {
     smoothedCompassHeading = heading;
+    compassDisplayAngle = heading;
   } else {
-    // shortest signed angular difference, so it doesn't spin the long way around at the 0°/360° seam
+    // shortest signed angular difference, so we always turn the short way at the 0°/360° seam
     const diff = ((heading - smoothedCompassHeading + 540) % 360) - 180;
     smoothedCompassHeading = (smoothedCompassHeading + diff * 0.2 + 360) % 360;
+    // apply the same delta to an UNBOUNDED angle for rendering, so the CSS transition
+    // never has to jump ~360° backward when the normalized value wraps at 0/360
+    compassDisplayAngle += diff * 0.2;
   }
   compassActive = true;
-  updateHeadingCone(smoothedCompassHeading);
+  updateHeadingCone(compassDisplayAngle);
+
+  const dbg = document.getElementById("headingDebug");
+  if (dbg) dbg.textContent = `(roh: ${Math.round(heading)}° · geglättet: ${Math.round(smoothedCompassHeading)}°)`;
 }
 
 function attachOrientationListener(){
@@ -519,8 +527,11 @@ function detachOrientationListener(){
     window.removeEventListener("deviceorientation", orientationHandler);
     orientationHandler = null;
   }
+  const dbg = document.getElementById("headingDebug");
+  if (dbg) dbg.textContent = "";
   compassActive = false;
   smoothedCompassHeading = null;
+  compassDisplayAngle = null;
 }
 
 function updateUserLocation(pos, isFirstFix){
@@ -697,7 +708,7 @@ document.getElementById("ipClose").addEventListener("click", () => {
   infoPanel.classList.remove("visible");
   clearSolo();
 });
-map.on("click", () => { infoPanel.classList.remove("visible"); clearSolo(); });
+map.on("click", () => { infoPanel.classList.remove("visible"); clearSolo(); clearSelection(); });
 
 function showTrailInfo(t){
   if (soloId && soloId !== t.id) clearSolo();
@@ -708,10 +719,42 @@ function showTrailInfo(t){
       <span class="dot-start">●</span> → ${t.len} km → <span class="dot-end">●</span>
       &middot; ${t.up} m ↑ / ${t.down} m ↓
       <button class="solo-btn${isSolo ? " active" : ""}" data-id="${t.id}" title="${isSolo ? "Alle wieder anzeigen" : "Nur diesen Trail zeigen"}">👁</button>
-      ${t.url ? `<br><a class="ip-link" href="${t.url}" target="_blank" rel="noopener">Zur Tour auf der Website ↗</a>` : ""}
+      <br>
+      ${t.url ? `<a class="ip-link" href="${t.url}" target="_blank" rel="noopener">Zur Tour auf der Website ↗</a>` : ""}
+      <button class="ip-link gpx-download-btn" data-id="${t.id}" title="GPX herunterladen">GPX ⬇</button>
     </div>`;
   infoPanel.classList.add("visible");
 }
+
+function downloadTrailGpx(id){
+  const layer = lineLayers[id];
+  const t = lineTrails.find(tr => tr.id === id);
+  if (!layer || !t) return;
+  const trkpts = layer.coords.map(([lat, lon]) => `      <trkpt lat="${lat}" lon="${lon}"></trkpt>`).join("\n");
+  const gpx = `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Paznaun Bike Trails" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk>
+    <name>${t.name}</name>
+    <trkseg>
+${trkpts}
+    </trkseg>
+  </trk>
+</gpx>`;
+  const blob = new Blob([gpx], { type: "application/gpx+xml" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${t.name.replace(/[^\w\-]+/g, "_")}.gpx`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+ipContent.addEventListener("click", (e) => {
+  const dlBtn = e.target.closest(".gpx-download-btn");
+  if (dlBtn) downloadTrailGpx(dlBtn.dataset.id);
+});
 
 // ---- Render polylines for GPX trails ----
 let currentSelectedId = null;
@@ -731,10 +774,24 @@ function hideEndpoints(id){
 }
 
 const lineLayers = {};
+
+function resetAllHoverStyles(exceptId){
+  Object.entries(lineLayers).forEach(([lid, layer]) => {
+    if (lid !== exceptId) {
+      layer.line.setStyle({ weight: BASE_WEIGHT, opacity: 0.85 });
+      if (layer.card) layer.card.classList.remove("hovered");
+      if (currentSelectedId !== lid) hideEndpoints(lid);
+    }
+  });
+}
+
 lineTrails.forEach(t => {
   const coords = TRAIL_GEO[t.id];
   if (!coords) return;
-  const line = L.polyline(coords, { color: diffColor[t.diff], weight: BASE_WEIGHT, opacity: 0.85, bubblingMouseEvents:false }).addTo(map);
+  const line = L.polyline(coords, { color: diffColor[t.diff], weight: BASE_WEIGHT, opacity: 0.85, bubblingMouseEvents:false, interactive:false }).addTo(map);
+  // Invisible, much wider line laid over the visible one — makes tapping on touch screens far easier
+  // without changing how thin the trail looks. All interaction happens on this one.
+  const hitLine = L.polyline(coords, { color:"#000", weight: 22, opacity: 0, bubblingMouseEvents:false }).addTo(map);
   const startDot = L.circleMarker(coords[0], { radius:5, color:"#22301f", weight:1.5, fillColor:"#fff", fillOpacity:1, bubblingMouseEvents:false }).addTo(map);
   const startMarker = L.circleMarker(coords[0], { radius:5, color:"#0d3d1a", weight:1.5, fillColor:"#3fbf5e", fillOpacity:1, bubblingMouseEvents:false });
   const endMarker = L.circleMarker(coords[coords.length - 1], { radius:5, color:"#5c0f0a", weight:1.5, fillColor:"#e0392b", fillOpacity:1, bubblingMouseEvents:false });
@@ -747,15 +804,16 @@ lineTrails.forEach(t => {
   endMarker.bindTooltip("Ziel", { permanent:false, direction:"top", className:"trail-label-tooltip", interactive:false });
 
   function setHover(on){
+    if (on) resetAllHoverStyles(t.id); // force any stuck "fat" trail (common on touch, missed mouseout) back to normal first
     line.setStyle({ weight: on ? HOVER_WEIGHT : BASE_WEIGHT, opacity: on ? 1 : 0.85 });
     const card = lineLayers[t.id].card;
     if (card) card.classList.toggle("hovered", on);
     if (on) { showEndpoints(t.id); }
     else if (currentSelectedId !== t.id) { hideEndpoints(t.id); }
   }
-  line.on("mouseover", () => setHover(true));
-  line.on("mouseout", () => setHover(false));
-  line.on("click", () => { showTrailInfo(t); selectCardFor(t.id); });
+  hitLine.on("mouseover", () => setHover(true));
+  hitLine.on("mouseout", () => setHover(false));
+  hitLine.on("click", () => { setHover(true); showTrailInfo(t); selectCardFor(t.id); });
   startDot.on("click", () => { showTrailInfo(t); selectCardFor(t.id); });
   startDot.on("mouseover", () => setHover(true));
   startDot.on("mouseout", () => setHover(false));
@@ -766,7 +824,7 @@ lineTrails.forEach(t => {
   endMarker.on("mouseover", () => setHover(true));
   endMarker.on("mouseout", () => setHover(false));
 
-  lineLayers[t.id] = { line, startDot, startMarker, endMarker, bounds, setHover, midIdx, coords, card:null };
+  lineLayers[t.id] = { line, hitLine, startDot, startMarker, endMarker, bounds, setHover, midIdx, coords, card:null };
 });
 
 // ---- Name labels toggle ----
@@ -796,6 +854,12 @@ function highlightSelectedTrail(id){
   layer.line.bringToFront();
   showEndpoints(id);
   currentSelectedId = id;
+}
+
+function clearSelection(){
+  if (selectedCard) { selectedCard.classList.remove("selected"); selectedCard = null; }
+  if (currentSelectedId) { hideEndpoints(currentSelectedId); currentSelectedId = null; }
+  if (map.hasLayer(selectionOutline)) map.removeLayer(selectionOutline);
 }
 
 function selectTrail(id, card){
@@ -841,22 +905,25 @@ function render(){
     group.className = "hub-group";
     const title = document.createElement("div");
     title.className = "hub-title";
-    title.textContent = REGIONS[regionKey].label + " — GPX-Trails";
+    title.textContent = REGIONS[regionKey].label;
     title.style.color = REGIONS[regionKey].color;
     group.appendChild(title);
 
+    let anyVisibleInRegion = false;
     regionLineTrails.forEach(t => {
       total++;
       const layer = lineLayers[t.id];
       const visible = regionOk && activeDiffs.has(t.diff);
       if (layer) {
-        if (visible) { map.addLayer(layer.line); map.addLayer(layer.startDot); shown++; }
-        else { map.removeLayer(layer.line); map.removeLayer(layer.startDot); hideEndpoints(t.id); }
+        if (visible) { map.addLayer(layer.line); map.addLayer(layer.hitLine); map.addLayer(layer.startDot); shown++; }
+        else { map.removeLayer(layer.line); map.removeLayer(layer.hitLine); map.removeLayer(layer.startDot); hideEndpoints(t.id); }
       }
+      if (!visible) { if (layer) layer.card = null; return; } // filtered out — don't add a list card at all
+      anyVisibleInRegion = true;
       const card = document.createElement("div");
-      card.className = "trail-card" + (visible ? "" : " dimmed");
+      card.className = "trail-card";
       card.innerHTML = `
-        <div class="trail-name"><span class="badge ${t.diff}"></span>${t.name} <span class="tag-geo">GPX</span></div>
+        <div class="trail-name"><span class="badge ${t.diff}"></span>${t.name}</div>
         <div class="trail-meta"><span>${t.len} km</span><span>${t.up} m ↑ / ${t.down} m ↓</span></div>`;
       card.addEventListener("click", () => {
         if (!layer) return;
@@ -870,7 +937,7 @@ function render(){
       if (layer) layer.card = card;
       group.appendChild(card);
     });
-    listEl.appendChild(group);
+    if (anyVisibleInRegion) listEl.appendChild(group);
   });
 
   countEl.textContent = `${shown} von ${total} Trails sichtbar`;
