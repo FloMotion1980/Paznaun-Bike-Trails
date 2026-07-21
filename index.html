@@ -21,6 +21,7 @@
     --rot: #c23b30;
     --schwarz: #1c1c1c;
     --highlight: #e0a326;
+    --select-yellow: #fff200;
     --card-bg: #ffffff;
   }
   *{ box-sizing:border-box; }
@@ -83,7 +84,7 @@
     cursor: pointer; transition: background .12s ease, border-color .12s ease; }
   .trail-card:hover, .trail-card.hovered{ background: #fbf1de; border-color: var(--highlight); }
   .trail-card.dimmed{ opacity: .28; pointer-events:none; }
-  .trail-card.selected{ background:#eef3e6; border-color: var(--rust); }
+  .trail-card.selected{ background:#fffbe6; border-color: var(--select-yellow); border-width:2px; box-shadow: 0 0 0 1px var(--select-yellow); }
   .trail-name{ font-size: 14.5px; font-weight: 600; margin: 0 0 3px; }
   .trail-meta{ font-family: Arial, sans-serif; font-size: 11.5px; color: #4c574d; display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
   .badge{ display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:4px; vertical-align:middle; }
@@ -127,12 +128,22 @@
     letter-spacing:.5px; color:var(--forest-dark); margin:0 22px 8px 0; border-bottom:1px solid #ddd; padding-bottom:6px;
   }
   #infoPanel .ip-trail{ font-size:12.5px; margin-bottom:10px; line-height:1.5; }
+  #infoPanel .ip-trail .dot-start{ color:#3fbf5e; font-size:19px; vertical-align:middle; }
+  #infoPanel .ip-trail .dot-end{ color:#e0392b; font-size:19px; vertical-align:middle; }
   #infoPanel .ip-trail b{ font-size:13.5px; }
   #infoPanel .ip-trail .ip-link{
     display:inline-block; margin-top:4px; color:#fff; background: var(--rust); text-decoration:none;
     font-size:11.5px; padding:4px 10px; border-radius:14px;
   }
   #infoPanel .ip-trail .ip-link:hover{ background: var(--rust-light); }
+  #infoPanel .ip-trail .solo-btn{
+    display:inline-flex; align-items:center; justify-content:center;
+    width:22px; height:22px; margin-left:4px; vertical-align:middle;
+    border:none; border-radius:50%; cursor:pointer; font-size:12px; line-height:1;
+    background: var(--forest); color:#fff; padding:0;
+  }
+  #infoPanel .ip-trail .solo-btn:hover{ background: var(--forest-dark); }
+  #infoPanel .ip-trail .solo-btn.active{ background: var(--select-yellow); color: var(--ink); }
 
   .trail-label-tooltip{
     background: rgba(255,255,255,0.9); border: 1px solid #99a596; color: var(--ink);
@@ -155,6 +166,29 @@
     padding: 6px; display:flex; gap:5px;
   }
   #baseLayerControl .chip{ font-size:11.5px; padding:4px 9px; }
+
+  #locateBtn{
+    position:absolute; bottom:16px; right:16px; z-index:1000;
+    width:46px; height:46px; border-radius:50%;
+    background: rgba(255,255,255,0.97); border:1px solid #d8ddd0;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.2);
+    font-size:22px; display:flex; align-items:center; justify-content:center;
+    cursor:pointer;
+  }
+  #locateBtn:hover{ background:#f5f7ef; }
+  #locateBtn.active{ background: var(--forest); }
+  .geo-wrap{ position:relative; width:40px; height:40px; transition: transform .3s ease; }
+  .geo-cone{
+    position:absolute; left:50%; top:50%; width:0; height:0;
+    border-left:13px solid transparent; border-right:13px solid transparent;
+    border-bottom:32px solid rgba(26,115,232,0.35);
+    transform: translate(-50%,-100%);
+  }
+  .geo-dot{
+    position:absolute; left:50%; top:50%; width:16px; height:16px;
+    margin:-8px 0 0 -8px; background:#1a73e8; border:3px solid #fff; border-radius:50%;
+    box-shadow: 0 0 4px rgba(0,0,0,0.5);
+  }
   #layerWarning{
     position:absolute; bottom:16px; left:16px; z-index:1000;
     background: rgba(28,38,32,0.92); color:#f2f3ec; font-family: Arial, sans-serif; font-size: 12px;
@@ -175,6 +209,14 @@
   #fatalError h2{ margin:0 0 10px; color:var(--rust); font-size:16px; }
   #fatalError p{ margin:0 0 8px; font-size:13.5px; line-height:1.5; color:var(--ink); }
   #fatalError code{ background:#f3e6da; padding:1px 5px; border-radius:4px; font-size:12px; }
+  @media (max-width: 768px){
+    #infoPanel{
+      top:auto; bottom:16px; left:50%; right:auto;
+      transform: translateX(-50%);
+      width:max-content; max-width:min(92vw, 360px);
+      max-height:min(30vh, 220px);
+    }
+  }
 </style>
 </head>
 <body>
@@ -221,6 +263,7 @@
         <button class="chip" data-layer="topo">Relief</button>
         <button class="chip" data-layer="sat">Satellit</button>
       </div>
+      <button id="locateBtn" title="Mein Standort">📍</button>
       <div id="infoPanel">
         <button class="ip-close" id="ipClose" title="Schließen">&times;</button>
         <div id="ipContent"></div>
@@ -333,7 +376,7 @@ function closeSidebarIfMobile(){
   if (window.innerWidth <= 768) closeSidebar();
 }
 
-const map = L.map('map', { scrollWheelZoom:true }).setView([46.99, 10.29], 12);
+const map = L.map('map', { scrollWheelZoom:true, zoomControl:false }).setView([46.99, 10.29], 12);
 
 const baseLayers = {
   osm: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -381,6 +424,73 @@ watchLayer(baseLayers.topo, "Relief (Topo)");
 watchLayer(baseLayers.sat, "Satellit (Esri)");
 watchLayer(baseLayers.carto, "Straße hell (CARTO)");
 
+// ---- My Location (blue dot, accuracy ring, heading cone) ----
+const geoIcon = L.divIcon({
+  html: '<div class="geo-wrap"><div class="geo-cone" style="display:none;"></div><div class="geo-dot"></div></div>',
+  className: "", iconSize: [40, 40], iconAnchor: [20, 20]
+});
+let userLocationMarker = null;
+let userAccuracyCircle = null;
+let geoWatchId = null;
+const locateBtn = document.getElementById("locateBtn");
+
+function updateUserLocation(pos, isFirstFix){
+  const { latitude, longitude, accuracy, heading } = pos.coords;
+  const latlng = [latitude, longitude];
+
+  if (!userLocationMarker) {
+    userLocationMarker = L.marker(latlng, { icon: geoIcon, zIndexOffset: 1000, interactive:false }).addTo(map);
+  } else {
+    userLocationMarker.setLatLng(latlng);
+  }
+  if (!userAccuracyCircle) {
+    userAccuracyCircle = L.circle(latlng, {
+      radius: accuracy || 0, color:"#1a73e8", weight:1, fillColor:"#1a73e8", fillOpacity:0.12, interactive:false
+    }).addTo(map);
+  } else {
+    userAccuracyCircle.setLatLng(latlng);
+    userAccuracyCircle.setRadius(accuracy || 0);
+  }
+
+  const el = userLocationMarker.getElement();
+  if (el) {
+    const wrap = el.querySelector(".geo-wrap");
+    const cone = el.querySelector(".geo-cone");
+    if (heading !== null && heading !== undefined && !isNaN(heading)) {
+      cone.style.display = "block";
+      wrap.style.transform = `rotate(${heading}deg)`;
+    } else {
+      cone.style.display = "none";
+    }
+  }
+  if (isFirstFix) map.flyTo(latlng, 15, { duration: 0.8 });
+}
+
+locateBtn.addEventListener("click", () => {
+  if (!navigator.geolocation) {
+    layerWarningEl.textContent = "Dieser Browser unterstützt keine Standortabfrage.";
+    layerWarningEl.classList.add("visible");
+    return;
+  }
+  if (geoWatchId !== null) {
+    // already tracking — just recenter on the last known position
+    if (userLocationMarker) map.flyTo(userLocationMarker.getLatLng(), 15, { duration: 0.8 });
+    return;
+  }
+  locateBtn.classList.add("active");
+  let firstFix = true;
+  geoWatchId = navigator.geolocation.watchPosition(
+    (pos) => { updateUserLocation(pos, firstFix); firstFix = false; },
+    (err) => {
+      locateBtn.classList.remove("active");
+      geoWatchId = null;
+      layerWarningEl.textContent = "Standort nicht verfügbar: " + err.message;
+      layerWarningEl.classList.add("visible");
+    },
+    { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
+  );
+});
+
 // ---- Permanent place labels (Ischgl, Samnaun, Galtür) — always visible, independent of zoom ----
 const PLACES = [
   { name:"Ischgl", lat:47.01257, lng:10.29179 },
@@ -402,46 +512,125 @@ const HOVER_WEIGHT = 6.5;
 // ---- Info panel logic (replaces Leaflet popups so nothing covers the trail) ----
 const infoPanel = document.getElementById("infoPanel");
 const ipContent = document.getElementById("ipContent");
-document.getElementById("ipClose").addEventListener("click", () => {
-  infoPanel.classList.remove("visible");
+
+let soloId = null;
+const SOLO_DIM_OPACITY = 0.15;
+
+function applySolo(id){
+  Object.entries(lineLayers).forEach(([lid, layer]) => {
+    if (lid === id) {
+      layer.line.setStyle({ opacity: 0.9 });
+      layer.startDot.setStyle({ opacity:1, fillOpacity:1 });
+      layer.startMarker.setStyle({ opacity:1, fillOpacity:1 });
+      layer.endMarker.setStyle({ opacity:1, fillOpacity:1 });
+    } else {
+      layer.line.setStyle({ opacity: SOLO_DIM_OPACITY });
+      layer.startDot.setStyle({ opacity: SOLO_DIM_OPACITY, fillOpacity: SOLO_DIM_OPACITY });
+      layer.startMarker.setStyle({ opacity: SOLO_DIM_OPACITY, fillOpacity: SOLO_DIM_OPACITY });
+      layer.endMarker.setStyle({ opacity: SOLO_DIM_OPACITY, fillOpacity: SOLO_DIM_OPACITY });
+    }
+  });
+  soloId = id;
+}
+function clearSolo(){
+  Object.values(lineLayers).forEach(layer => {
+    layer.line.setStyle({ opacity: 0.85 });
+    layer.startDot.setStyle({ opacity:1, fillOpacity:1 });
+    layer.startMarker.setStyle({ opacity:1, fillOpacity:1 });
+    layer.endMarker.setStyle({ opacity:1, fillOpacity:1 });
+  });
+  soloId = null;
+}
+
+ipContent.addEventListener("click", (e) => {
+  const btn = e.target.closest(".solo-btn");
+  if (!btn) return;
+  const id = btn.dataset.id;
+  if (soloId === id) {
+    clearSolo();
+    btn.classList.remove("active");
+    btn.title = "Nur diesen Trail zeigen";
+  } else {
+    applySolo(id);
+    btn.classList.add("active");
+    btn.title = "Alle wieder anzeigen";
+  }
 });
 
+document.getElementById("ipClose").addEventListener("click", () => {
+  infoPanel.classList.remove("visible");
+  clearSolo();
+});
+map.on("click", () => { infoPanel.classList.remove("visible"); clearSolo(); });
+
 function showTrailInfo(t){
+  if (soloId && soloId !== t.id) clearSolo();
+  const isSolo = soloId === t.id;
   ipContent.innerHTML = `
     <h3>${t.name}</h3>
     <div class="ip-trail">
-      ${t.len} km &middot; ${t.up} m ↑ / ${t.down} m ↓<br>
-      ${t.url ? `<a class="ip-link" href="${t.url}" target="_blank" rel="noopener">Zur Tour auf der Website ↗</a>` : ""}
+      <span class="dot-start">●</span> → ${t.len} km → <span class="dot-end">●</span>
+      &middot; ${t.up} m ↑ / ${t.down} m ↓
+      <button class="solo-btn${isSolo ? " active" : ""}" data-id="${t.id}" title="${isSolo ? "Alle wieder anzeigen" : "Nur diesen Trail zeigen"}">👁</button>
+      ${t.url ? `<br><a class="ip-link" href="${t.url}" target="_blank" rel="noopener">Zur Tour auf der Website ↗</a>` : ""}
     </div>`;
   infoPanel.classList.add("visible");
 }
 
 // ---- Render polylines for GPX trails ----
+let currentSelectedId = null;
+function showEndpoints(id){
+  const layer = lineLayers[id];
+  if (!layer) return;
+  if (!map.hasLayer(layer.startMarker)) layer.startMarker.addTo(map);
+  if (!map.hasLayer(layer.endMarker)) layer.endMarker.addTo(map);
+  layer.startMarker.bringToFront();
+  layer.endMarker.bringToFront();
+}
+function hideEndpoints(id){
+  const layer = lineLayers[id];
+  if (!layer) return;
+  map.removeLayer(layer.startMarker);
+  map.removeLayer(layer.endMarker);
+}
+
 const lineLayers = {};
 lineTrails.forEach(t => {
   const coords = TRAIL_GEO[t.id];
   if (!coords) return;
-  const line = L.polyline(coords, { color: diffColor[t.diff], weight: BASE_WEIGHT, opacity: 0.85 }).addTo(map);
-  const startMarker = L.circleMarker(coords[0], { radius:5, color:"#22301f", weight:1.5, fillColor:"#fff", fillOpacity:1 }).addTo(map);
+  const line = L.polyline(coords, { color: diffColor[t.diff], weight: BASE_WEIGHT, opacity: 0.85, bubblingMouseEvents:false }).addTo(map);
+  const startDot = L.circleMarker(coords[0], { radius:5, color:"#22301f", weight:1.5, fillColor:"#fff", fillOpacity:1, bubblingMouseEvents:false }).addTo(map);
+  const startMarker = L.circleMarker(coords[0], { radius:5, color:"#0d3d1a", weight:1.5, fillColor:"#3fbf5e", fillOpacity:1, bubblingMouseEvents:false });
+  const endMarker = L.circleMarker(coords[coords.length - 1], { radius:5, color:"#5c0f0a", weight:1.5, fillColor:"#e0392b", fillOpacity:1, bubblingMouseEvents:false });
   const bounds = L.latLngBounds(coords);
   const midIdx = Math.floor(coords.length / 2);
 
   line.bindTooltip(t.name, { permanent:true, direction:"center", className:"trail-label-tooltip", interactive:false });
   line.closeTooltip();
+  startMarker.bindTooltip("Start", { permanent:false, direction:"top", className:"trail-label-tooltip", interactive:false });
+  endMarker.bindTooltip("Ziel", { permanent:false, direction:"top", className:"trail-label-tooltip", interactive:false });
 
   function setHover(on){
     line.setStyle({ weight: on ? HOVER_WEIGHT : BASE_WEIGHT, opacity: on ? 1 : 0.85 });
     const card = lineLayers[t.id].card;
     if (card) card.classList.toggle("hovered", on);
+    if (on) { showEndpoints(t.id); }
+    else if (currentSelectedId !== t.id) { hideEndpoints(t.id); }
   }
   line.on("mouseover", () => setHover(true));
   line.on("mouseout", () => setHover(false));
   line.on("click", () => { showTrailInfo(t); selectCardFor(t.id); });
+  startDot.on("click", () => { showTrailInfo(t); selectCardFor(t.id); });
+  startDot.on("mouseover", () => setHover(true));
+  startDot.on("mouseout", () => setHover(false));
   startMarker.on("click", () => { showTrailInfo(t); selectCardFor(t.id); });
   startMarker.on("mouseover", () => setHover(true));
   startMarker.on("mouseout", () => setHover(false));
+  endMarker.on("click", () => { showTrailInfo(t); selectCardFor(t.id); });
+  endMarker.on("mouseover", () => setHover(true));
+  endMarker.on("mouseout", () => setHover(false));
 
-  lineLayers[t.id] = { line, startMarker, bounds, setHover, midIdx, coords, card:null };
+  lineLayers[t.id] = { line, startDot, startMarker, endMarker, bounds, setHover, midIdx, coords, card:null };
 });
 
 // ---- Name labels toggle ----
@@ -457,14 +646,30 @@ const listEl = document.getElementById("trailList");
 const countEl = document.getElementById("countLine");
 let selectedCard = null;
 
-function selectCard(card){
+const selectionOutline = L.polyline([], {
+  color: "#fff200", weight: HOVER_WEIGHT + 3, opacity: 1, lineCap: "round", interactive: false
+});
+
+function highlightSelectedTrail(id){
+  const layer = lineLayers[id];
+  if (currentSelectedId && currentSelectedId !== id) hideEndpoints(currentSelectedId);
+  if (!layer) { if (map.hasLayer(selectionOutline)) map.removeLayer(selectionOutline); currentSelectedId = null; return; }
+  selectionOutline.setLatLngs(layer.coords);
+  if (!map.hasLayer(selectionOutline)) selectionOutline.addTo(map);
+  selectionOutline.bringToBack();
+  layer.line.bringToFront();
+  showEndpoints(id);
+  currentSelectedId = id;
+}
+
+function selectTrail(id, card){
   if (selectedCard) selectedCard.classList.remove("selected");
-  card.classList.add("selected");
-  selectedCard = card;
+  if (card) { card.classList.add("selected"); selectedCard = card; }
+  highlightSelectedTrail(id);
 }
 function selectCardFor(id){
   const layer = lineLayers[id];
-  if (layer && layer.card) selectCard(layer.card);
+  selectTrail(id, layer ? layer.card : null);
 }
 
 function render(){
@@ -495,8 +700,8 @@ function render(){
       const layer = lineLayers[t.id];
       const visible = regionOk && activeDiffs.has(t.diff);
       if (layer) {
-        if (visible) { map.addLayer(layer.line); map.addLayer(layer.startMarker); shown++; }
-        else { map.removeLayer(layer.line); map.removeLayer(layer.startMarker); }
+        if (visible) { map.addLayer(layer.line); map.addLayer(layer.startDot); shown++; }
+        else { map.removeLayer(layer.line); map.removeLayer(layer.startDot); hideEndpoints(t.id); }
       }
       const card = document.createElement("div");
       card.className = "trail-card" + (visible ? "" : " dimmed");
@@ -507,7 +712,7 @@ function render(){
         if (!layer) return;
         map.flyToBounds(layer.bounds, { padding:[60,320], duration:0.6 });
         showTrailInfo(t);
-        selectCard(card);
+        selectTrail(t.id, card);
         closeSidebarIfMobile();
       });
       card.addEventListener("mouseenter", () => { if (layer) layer.setHover(true); });
