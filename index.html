@@ -127,8 +127,9 @@
     letter-spacing:.5px; color:var(--forest-dark); margin:0 22px 8px 0; border-bottom:1px solid #ddd; padding-bottom:6px;
   }
   #infoPanel .ip-trail{ font-size:12.5px; margin-bottom:10px; line-height:1.5; }
-  .ele-chart{ display:block; width:100%; height:56px; margin:6px 0 2px; }
+  .ele-chart{ display:block; width:100%; height:46px; margin:4px 0 0; }
   .ele-chart .ele-label{ font-size:7px; fill:#4c574d; font-family:Arial, sans-serif; }
+  #infoPanel .ip-actions{ margin-top:2px; }
   #infoPanel .ip-trail .dot-start{ color:#3fbf5e; font-size:19px; vertical-align:middle; }
   #infoPanel .ip-trail .dot-end{ color:#e0392b; font-size:19px; vertical-align:middle; }
   #infoPanel .ip-trail b{ font-size:13.5px; }
@@ -163,14 +164,6 @@
     padding: 3px 9px; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.35);
   }
   .place-label-tooltip::before{ display:none; }
-
-  #baseLayerControl{
-    position:absolute; top:16px; right:16px; z-index:1000;
-    background: rgba(255,255,255,0.97); border-radius: 8px; border:1px solid #d8ddd0;
-    box-shadow: 0 3px 10px rgba(0,0,0,0.18);
-    padding: 6px; display:flex; gap:5px;
-  }
-  #baseLayerControl .chip{ font-size:11.5px; padding:4px 9px; }
 
   #locateBtn{
     display:none; position:absolute; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); right:16px; z-index:1000;
@@ -215,26 +208,27 @@
   }
   @keyframes recBlink{ 0%,100%{ opacity:1; } 50%{ opacity:0.25; } }
   #layerWarning{
-    position:absolute; bottom:64px; left:16px; z-index:1000;
+    position:absolute; bottom:16px; left:16px; z-index:1000;
     background: rgba(28,38,32,0.92); color:#f2f3ec; font-family: Arial, sans-serif; font-size: 12px;
     padding: 8px 12px; border-radius: 8px; max-width: 300px; display:none; line-height:1.4;
   }
   #layerWarning.visible{ display:block; }
 
   #offlineBanner{
-    display:none; position:absolute; top:16px; left:16px; z-index:1500;
+    display:none; position:absolute; top:16px; right:16px; z-index:1500;
     background: rgba(194,59,48,0.95); color:#fff; font-family: Arial, sans-serif; font-size:12.5px; font-weight:600;
     padding:6px 14px; border-radius:16px; box-shadow:0 3px 10px rgba(0,0,0,0.25);
   }
   #offlineBanner.visible{ display:block; }
   #preloadBtn{
-    position:absolute; bottom:16px; left:16px; z-index:1000;
+    width:100%; margin-top:8px;
     background: rgba(255,255,255,0.97); border:1px solid #d8ddd0; border-radius:8px;
-    padding:6px 12px; font-family:Arial, sans-serif; font-size:11.5px; font-weight:600; color:var(--forest);
-    cursor:pointer; box-shadow: 0 3px 10px rgba(0,0,0,0.18);
+    padding:7px 12px; font-family:Arial, sans-serif; font-size:11.5px; font-weight:600; color:var(--forest);
+    cursor:pointer;
   }
   #preloadBtn:hover{ background:#f5f7ef; }
   #preloadBtn:disabled{ opacity:0.6; cursor:default; }
+  .preload-hint{ font-family: Arial, sans-serif; font-size:10px; color:var(--stone); line-height:1.4; margin-top:5px; }
 
   #fatalError{
     position:fixed; inset:0; z-index:5000; background: var(--paper);
@@ -290,6 +284,15 @@
           <button class="chip diff-schwarz active" data-diff="schwarz">Schwer</button>
         </div>
         <label class="toggle-row"><input type="checkbox" id="showNamesToggle"> Trail-Namen auf der Karte anzeigen</label>
+        <h2>Kartenebene</h2>
+        <div class="chip-row" id="baseLayerControl">
+          <button class="chip active" data-layer="osm">Straße</button>
+          <button class="chip" data-layer="carto">Straße hell</button>
+          <button class="chip" data-layer="topo">Relief</button>
+          <button class="chip" data-layer="sat">Satellit</button>
+        </div>
+        <button id="preloadBtn">📥 Trail-Umgebung vorladen</button>
+        <div class="preload-hint">Lädt einen Streifen um alle aktuell gefilterten Trails (Region/Schwierigkeit oben), über mehrere Zoomstufen. Filter vorher einschränken, um Umfang &amp; Datenmenge zu reduzieren.</div>
       </div>
       <div class="count-line" id="countLine"></div>
       <div class="trail-list" id="trailList"></div>
@@ -297,12 +300,6 @@
     <div class="map-wrap">
       <div id="map"></div>
       <button id="sidebarToggle">☰ Trails</button>
-      <div id="baseLayerControl">
-        <button class="chip active" data-layer="osm">Straße</button>
-        <button class="chip" data-layer="carto">Straße hell</button>
-        <button class="chip" data-layer="topo">Relief</button>
-        <button class="chip" data-layer="sat">Satellit</button>
-      </div>
       <button id="locateBtn" title="Mein Standort">📍</button>
       <div id="liveStatus"><span class="rec-dot"></span> Live-Tracking</div>
       <div id="infoPanel">
@@ -311,7 +308,6 @@
       </div>
       <div id="layerWarning"></div>
       <div id="offlineBanner">📴 Offline — es werden nur bereits geladene Kartenausschnitte angezeigt</div>
-      <button id="preloadBtn">📥 Karte hier vorladen</button>
     </div>
   </div>
 </div>
@@ -731,7 +727,7 @@ map.on("click", () => { infoPanel.classList.remove("visible"); clearSolo(); clea
 
 function buildElevationSvg(profile){
   if (!profile || profile.length < 2) return "";
-  const W = 240, H = 60, padTop = 6, padBottom = 14;
+  const W = 240, H = 48, padTop = 5, padBottom = 9;
   const distMax = profile[profile.length - 1][0] || 1;
   const eles = profile.map(p => p[1]);
   const eleMin = Math.min(...eles), eleMax = Math.max(...eles);
@@ -760,9 +756,10 @@ function showTrailInfo(t){
       &middot; ${t.up} m ↑ / ${t.down} m ↓
       <button class="solo-btn${isSolo ? " active" : ""}" data-id="${t.id}" title="${isSolo ? "Alle wieder anzeigen" : "Nur diesen Trail zeigen"}">👁</button>
       ${profile ? buildElevationSvg(profile) : ""}
-      <br>
-      ${t.url ? `<a class="ip-link" href="${t.url}" target="_blank" rel="noopener">Zur Tour auf der Website ↗</a>` : ""}
-      <button class="ip-link gpx-download-btn" data-id="${t.id}" title="GPX herunterladen">GPX ⬇</button>
+      <div class="ip-actions">
+        ${t.url ? `<a class="ip-link" href="${t.url}" target="_blank" rel="noopener">Zur Tour auf der Website ↗</a>` : ""}
+        <button class="ip-link gpx-download-btn" data-id="${t.id}" title="GPX herunterladen">GPX ⬇</button>
+      </div>
     </div>`;
   infoPanel.classList.add("visible");
 }
@@ -1010,35 +1007,68 @@ preloadBtn.addEventListener("click", async () => {
     return;
   }
   const activeLayer = baseLayers[currentBaseKey];
-  const bounds = map.getBounds();
-  const baseZoom = map.getZoom();
-  const zooms = [baseZoom - 1, baseZoom, baseZoom + 1, baseZoom + 2].filter(z => z >= 0 && z <= 19);
+  const ZOOMS = [12, 13, 14, 15, 16];   // regional overview down to good trail-level detail
+  const TILE_BUFFER = 1;                // ring of extra tiles around the line, in tile units
 
-  // Collect all tile coordinates covering the current view across a few zoom levels
-  const tileUrls = [];
-  zooms.forEach(z => {
-    const nw = map.project(bounds.getNorthWest(), z).divideBy(256).floor();
-    const se = map.project(bounds.getSouthEast(), z).divideBy(256).floor();
-    for (let x = nw.x; x <= se.x; x++) {
-      for (let y = nw.y; y <= se.y; y++) {
-        tileUrls.push(activeLayer.getTileUrl({ x, y, z }));
-      }
-    }
-  });
+  // Only trails currently passing the region/difficulty filters — narrow the filters
+  // first (e.g. to just one region) to shrink scope and download size.
+  const activeTrails = lineTrails.filter(t => activeRegions.has(t.region) && activeDiffs.has(t.diff));
 
   preloadBtn.disabled = true;
-  let done = 0;
-  const total = tileUrls.length;
-  preloadBtn.textContent = `📥 Lade 0/${total}…`;
+  preloadBtn.textContent = "📥 Berechne benötigte Kacheln…";
+  await new Promise(r => setTimeout(r, 0)); // let the button repaint before the heavy loop
 
-  for (const url of tileUrls) {
-    try { await fetch(url); } catch (e) { /* ignore individual failures */ }
-    done++;
-    if (done % 5 === 0 || done === total) preloadBtn.textContent = `📥 Lade ${done}/${total}…`;
+  const tileKeys = new Set();
+  const tileCoords = [];
+  function addTile(x, y, z){
+    const key = `${z}/${x}/${y}`;
+    if (!tileKeys.has(key)) { tileKeys.add(key); tileCoords.push({ x, y, z }); }
   }
 
+  activeTrails.forEach(t => {
+    const coords = TRAIL_GEO[t.id];
+    if (!coords) return;
+    ZOOMS.forEach(z => {
+      const pts = coords.map(c => map.project(L.latLng(c[0], c[1]), z));
+      for (let i = 0; i < pts.length; i++) {
+        // sample along each segment finely enough that no tile in between gets skipped
+        const a = pts[i];
+        const b = pts[i + 1] || pts[i];
+        const segLen = a.distanceTo(b);
+        const steps = Math.max(1, Math.ceil(segLen / 200));
+        for (let s = 0; s <= steps; s++) {
+          const px = a.x + (b.x - a.x) * (s / steps);
+          const py = a.y + (b.y - a.y) * (s / steps);
+          const tx = Math.floor(px / 256), ty = Math.floor(py / 256);
+          for (let dx = -TILE_BUFFER; dx <= TILE_BUFFER; dx++) {
+            for (let dy = -TILE_BUFFER; dy <= TILE_BUFFER; dy++) {
+              addTile(tx + dx, ty + dy, z);
+            }
+          }
+        }
+      }
+    });
+  });
+
+  const total = tileCoords.length;
+  let done = 0;
+  preloadBtn.textContent = `📥 Lade 0/${total}…`;
+
+  // Fetch with limited concurrency so it's reasonably fast without hammering the tile server
+  const CONCURRENCY = 8;
+  let idx = 0;
+  async function worker(){
+    while (idx < tileCoords.length) {
+      const tc = tileCoords[idx++];
+      try { await fetch(activeLayer.getTileUrl(tc)); } catch (e) { /* ignore individual failures */ }
+      done++;
+      if (done % 10 === 0 || done === total) preloadBtn.textContent = `📥 Lade ${done}/${total}…`;
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, total || 1) }, worker));
+
   preloadBtn.textContent = `✅ ${total} Kacheln gespeichert`;
-  setTimeout(() => { preloadBtn.textContent = "📥 Karte hier vorladen"; preloadBtn.disabled = false; }, 3000);
+  setTimeout(() => { preloadBtn.textContent = "📥 Trail-Umgebung vorladen"; preloadBtn.disabled = false; }, 3500);
 });
 } catch (err) {
   console.error(err);
