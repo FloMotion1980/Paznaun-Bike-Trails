@@ -37,7 +37,7 @@
       repeating-radial-gradient(circle at 80% 75%, transparent 0, transparent 54px, var(--contour) 55px, transparent 56px);
     background-size: 420px 420px, 520px 520px;
   }
-  .app{ display:flex; flex-direction:column; height:100vh; }
+  .app{ display:flex; flex-direction:column; height:100vh; height:100dvh; }
   header{ padding: calc(14px + env(safe-area-inset-top, 0px)) 22px 12px; background: var(--forest-dark); color: #f2f3ec;
     display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; border-bottom: 3px solid var(--rust); }
   header h1{ font-family: 'Copperplate','Trebuchet MS',sans-serif; letter-spacing: 1.5px; font-size: 20px; margin:0; text-transform: uppercase; }
@@ -269,18 +269,17 @@
       bottom: calc(16px + env(safe-area-inset-bottom, 0px) + 54px);
     }
   }
-  @media (display-mode: standalone){
-    #infoPanel{
-      bottom: calc(16px + env(safe-area-inset-bottom, 0px));
-    }
-    #locateBtn{
-      bottom: calc(16px + env(safe-area-inset-bottom, 0px));
-    }
+  html.is-standalone #infoPanel{
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+  html.is-standalone #locateBtn{
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px)) !important;
   }
   @media (orientation: landscape) and (max-height: 500px){
     #infoPanel{
-      max-height: min(60vh, 170px);
-      max-width: min(60vw, 340px);
+      bottom: calc(16px + env(safe-area-inset-bottom, 0px)) !important;
+      max-height: min(70vh, 190px);
+      max-width: min(55vw, 340px);
     }
     .ele-chart{ height:36px; }
   }
@@ -343,6 +342,9 @@
 <div id="sidebarBackdrop"></div>
 
 <script>
+if (window.navigator.standalone === true) {
+  document.documentElement.classList.add("is-standalone");
+}
 window.onerror = function(msg, url, line, col, err) {
   var msgEl = document.getElementById('fatalErrorMsg');
   var panel = document.getElementById('fatalError');
@@ -539,7 +541,7 @@ function handleOrientation(event){
   if (heading === null || isNaN(heading)) return;
   // The sensor reports heading relative to the device's physical (portrait) top, not the
   // current screen orientation — correct for landscape rotation so "up" on screen is right.
-  heading = (heading - getScreenAngle() + 360) % 360;
+  heading = (heading + getScreenAngle() + 360) % 360;
   heading = (heading + 360) % 360;
 
   if (smoothedCompassHeading === null) {
