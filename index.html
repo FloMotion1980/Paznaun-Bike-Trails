@@ -1000,7 +1000,15 @@ window.addEventListener("offline", updateOnlineStatus);
 updateOnlineStatus();
 
 const preloadBtn = document.getElementById("preloadBtn");
+let preloadRunning = false;
+let preloadCancelled = false;
+
 preloadBtn.addEventListener("click", async () => {
+  if (preloadRunning) {
+    preloadCancelled = true;
+    preloadBtn.textContent = "⏳ Breche ab…";
+    return;
+  }
   if (!navigator.onLine) {
     layerWarningEl.textContent = "Zum Vorladen brauchst du gerade Internet — offline lässt sich nichts Neues laden.";
     layerWarningEl.classList.add("visible");
@@ -1014,8 +1022,9 @@ preloadBtn.addEventListener("click", async () => {
   // first (e.g. to just one region) to shrink scope and download size.
   const activeTrails = lineTrails.filter(t => activeRegions.has(t.region) && activeDiffs.has(t.diff));
 
-  preloadBtn.disabled = true;
-  preloadBtn.textContent = "📥 Berechne benötigte Kacheln…";
+  preloadRunning = true;
+  preloadCancelled = false;
+  preloadBtn.textContent = "📥 Berechne benötigte Kacheln… (Tippen zum Abbrechen)";
   await new Promise(r => setTimeout(r, 0)); // let the button repaint before the heavy loop
 
   const tileKeys = new Set();
@@ -1050,25 +1059,65 @@ preloadBtn.addEventListener("click", async () => {
     });
   });
 
+  function finish(msg){
+    preloadRunning = false;
+    preloadBtn.textContent = msg;
+    setTimeout(() => { preloadBtn.textContent = "📥 Trail-Umgebung vorladen"; preloadBtn.disabled = false; }, 4000);
+  }
+
   const total = tileCoords.length;
+  preloadBtn.textContent = `📥 Prüfe Cache (0/${total})… (Tippen zum Abbrechen)`;
+
+  // Skip tiles we already have — only fetch what's genuinely missing.
+  const PRELOAD_CACHE_NAME = "paznaun-bike-v1"; // must match CACHE_NAME in sw.js
+  let toFetch = tileCoords.map(tc => activeLayer.getTileUrl(tc));
+  if ("caches" in window) {
+    try {
+      const cache = await caches.open(PRELOAD_CACHE_NAME);
+      const checked = [];
+      let checkedCount = 0;
+      const CHECK_CONCURRENCY = 20;
+      let ci = 0;
+      async function checkWorker(){
+        while (ci < toFetch.length) {
+          if (preloadCancelled) return;
+          const i = ci++;
+          const hit = await cache.match(toFetch[i]);
+          if (!hit) checked.push(toFetch[i]);
+          checkedCount++;
+          if (checkedCount % 50 === 0 || checkedCount === toFetch.length) {
+            preloadBtn.textContent = `📥 Prüfe Cache (${checkedCount}/${toFetch.length})… (Tippen zum Abbrechen)`;
+          }
+        }
+      }
+      await Promise.all(Array.from({ length: Math.min(CHECK_CONCURRENCY, toFetch.length || 1) }, checkWorker));
+      if (preloadCancelled) { finish(`⏹ Abgebrochen (Cache-Prüfung)`); return; }
+      toFetch = checked;
+    } catch (e) { /* if cache check fails for some reason, just fetch everything */ }
+  }
+
+  const alreadyCached = total - toFetch.length;
+  const missing = toFetch.length;
   let done = 0;
-  preloadBtn.textContent = `📥 Lade 0/${total}…`;
+  preloadBtn.textContent = missing === 0 ? `✅ Schon alles da (${total})` : `📥 Lade 0/${missing} neue… (Tippen zum Abbrechen)`;
+  if (missing === 0) { finish(`✅ Schon alles da (${total})`); return; }
 
   // Fetch with limited concurrency so it's reasonably fast without hammering the tile server
   const CONCURRENCY = 8;
   let idx = 0;
   async function worker(){
-    while (idx < tileCoords.length) {
-      const tc = tileCoords[idx++];
-      try { await fetch(activeLayer.getTileUrl(tc)); } catch (e) { /* ignore individual failures */ }
+    while (idx < toFetch.length) {
+      if (preloadCancelled) return;
+      const url = toFetch[idx++];
+      try { await fetch(url); } catch (e) { /* ignore individual failures */ }
       done++;
-      if (done % 10 === 0 || done === total) preloadBtn.textContent = `📥 Lade ${done}/${total}…`;
+      if (done % 10 === 0 || done === missing) preloadBtn.textContent = `📥 Lade ${done}/${missing} neue… (Tippen zum Abbrechen)`;
     }
   }
-  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, total || 1) }, worker));
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, missing || 1) }, worker));
 
-  preloadBtn.textContent = `✅ ${total} Kacheln gespeichert`;
-  setTimeout(() => { preloadBtn.textContent = "📥 Trail-Umgebung vorladen"; preloadBtn.disabled = false; }, 3500);
+  if (preloadCancelled) { finish(`⏹ Abgebrochen (${done}/${missing} geladen, ${alreadyCached} schon vorhanden)`); return; }
+  finish(`✅ ${missing} neu, ${alreadyCached} schon vorhanden`);
 });
 } catch (err) {
   console.error(err);
