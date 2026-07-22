@@ -1027,6 +1027,8 @@ preloadBtn.addEventListener("click", async () => {
   preloadBtn.textContent = "📥 Berechne benötigte Kacheln… (Tippen zum Abbrechen)";
   await new Promise(r => setTimeout(r, 0)); // let the button repaint before the heavy loop
 
+  try {
+
   const tileKeys = new Set();
   const tileCoords = [];
   function addTile(x, y, z){
@@ -1109,7 +1111,7 @@ preloadBtn.addEventListener("click", async () => {
     while (idx < toFetch.length) {
       if (preloadCancelled) return;
       const url = toFetch[idx++];
-      try { await fetch(url); } catch (e) { /* ignore individual failures */ }
+      try { await fetch(url, { mode: "no-cors" }); } catch (e) { /* ignore individual failures */ }
       done++;
       if (done % 10 === 0 || done === missing) preloadBtn.textContent = `📥 Lade ${done}/${missing} neue… (Tippen zum Abbrechen)`;
     }
@@ -1118,6 +1120,15 @@ preloadBtn.addEventListener("click", async () => {
 
   if (preloadCancelled) { finish(`⏹ Abgebrochen (${done}/${missing} geladen, ${alreadyCached} schon vorhanden)`); return; }
   finish(`✅ ${missing} neu, ${alreadyCached} schon vorhanden`);
+
+  } catch (err) {
+    console.error("Vorladen-Fehler:", err);
+    preloadRunning = false;
+    preloadBtn.disabled = false;
+    preloadBtn.textContent = "📥 Trail-Umgebung vorladen";
+    layerWarningEl.textContent = "Vorladen abgebrochen wegen eines Fehlers: " + (err && err.message ? err.message : err);
+    layerWarningEl.classList.add("visible");
+  }
 });
 } catch (err) {
   console.error(err);
