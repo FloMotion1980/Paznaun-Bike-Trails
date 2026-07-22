@@ -277,20 +277,19 @@
   html.is-standalone #locateBtn{
     bottom: calc(16px + env(safe-area-inset-bottom, 0px)) !important;
   }
-  @media (orientation: landscape) and (max-height: 500px){
-    #infoPanel{
-      top: calc(70px + env(safe-area-inset-top, 0px)) !important;
-      right: calc(16px + env(safe-area-inset-right, 0px)) !important;
-      bottom: auto !important;
-      left: auto !important;
-      transform: none !important;
-      width: min(46vw, 300px) !important;
-      max-width: none !important;
-      max-height: calc(100vh - 90px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) !important;
-      overflow-y: auto;
-    }
-    .ele-chart{ height:40px; }
+  html.landscape-compact #infoPanel{
+    top: calc(70px + env(safe-area-inset-top, 0px)) !important;
+    right: calc(16px + env(safe-area-inset-right, 0px)) !important;
+    bottom: auto !important;
+    left: auto !important;
+    transform: none !important;
+    width: min(46vw, 300px) !important;
+    max-width: none !important;
+    max-height: calc(100vh - 90px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) !important;
+    height: auto !important;
+    overflow-y: auto;
   }
+  html.landscape-compact .ele-chart{ height:40px; }
 </style>
 </head>
 <body>
@@ -353,6 +352,13 @@
 if (window.navigator.standalone === true) {
   document.documentElement.classList.add("is-standalone");
 }
+function updateLayoutModeClass(){
+  const isLandscapeCompact = window.innerHeight < 500 && window.innerWidth > window.innerHeight;
+  document.documentElement.classList.toggle("landscape-compact", isLandscapeCompact);
+}
+updateLayoutModeClass();
+window.addEventListener("resize", updateLayoutModeClass);
+window.addEventListener("orientationchange", updateLayoutModeClass);
 window.onerror = function(msg, url, line, col, err) {
   var msgEl = document.getElementById('fatalErrorMsg');
   var panel = document.getElementById('fatalError');
@@ -959,7 +965,7 @@ function selectCardFor(id){
 }
 
 function isLandscapeShort(){
-  return window.matchMedia("(orientation: landscape) and (max-height: 500px)").matches;
+  return window.innerHeight < 500 && window.innerWidth > window.innerHeight;
 }
 
 function getFlyPadding(){
