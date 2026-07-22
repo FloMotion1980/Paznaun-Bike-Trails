@@ -3,6 +3,10 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black" />
+<meta name="apple-mobile-web-app-title" content="Paznaun Bike" />
+<meta name="theme-color" content="#1e3128" />
 <title>Paznaun Bike Trails</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
@@ -34,16 +38,19 @@
     background-size: 420px 420px, 520px 520px;
   }
   .app{ display:flex; flex-direction:column; height:100vh; }
-  header{ padding: 14px 22px 12px; background: var(--forest-dark); color: #f2f3ec;
+  header{ padding: calc(14px + env(safe-area-inset-top, 0px)) 22px 12px; background: var(--forest-dark); color: #f2f3ec;
     display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; border-bottom: 3px solid var(--rust); }
   header h1{ font-family: 'Copperplate','Trebuchet MS',sans-serif; letter-spacing: 1.5px; font-size: 20px; margin:0; text-transform: uppercase; }
   header .sub{ font-family: Arial, sans-serif; font-size: 12.5px; color: #b9c6b6; }
   .layout{ flex:1; display:flex; min-height:0; }
   aside{ width: 350px; min-width: 300px; background: var(--card-bg); border-right: 1px solid #d8ddd0;
-    display:flex; flex-direction:column; overflow:hidden; transition: transform .25s ease; }
+    display:flex; flex-direction:column; overflow-y:auto; overflow-x:hidden; transition: transform .25s ease; }
 
   #sidebarToggle{
-    display:none; position:absolute; top:16px; left:16px; z-index:1900;
+    display:none; position:absolute;
+    top: calc(16px + env(safe-area-inset-top, 0px));
+    left: calc(16px + env(safe-area-inset-left, 0px));
+    z-index:1900;
     background: var(--forest-dark); color:#f2f3ec; border:none; border-radius:8px;
     padding: 9px 14px; font-family: Arial, sans-serif; font-size:13px; font-weight:600;
     box-shadow: 0 3px 10px rgba(0,0,0,0.25); cursor:pointer; align-items:center; gap:6px;
@@ -62,7 +69,7 @@
     aside.open{ transform: translateX(0); }
     #sidebarToggle{ display:flex; }
   }
-  .filters{ padding: 14px 16px 10px; border-bottom: 1px solid #e3e6da; font-family: Arial, sans-serif; }
+  .filters{ padding: 14px 16px 10px; border-bottom: 1px solid #e3e6da; font-family: Arial, sans-serif; flex-shrink:0; }
   .filters h2{ font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--stone); margin: 0 0 8px; font-weight:700; }
   .chip-row{ display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; }
   .chip{ border: 1.5px solid var(--forest); color: var(--forest); background: transparent; border-radius: 20px;
@@ -75,7 +82,7 @@
   .toggle-row{ display:flex; align-items:center; gap:7px; font-family: Arial, sans-serif; font-size:12.5px; color:var(--ink); margin-top:4px; }
   .toggle-row input{ accent-color: var(--forest); width:14px; height:14px; }
   .count-line{ font-size: 11.5px; color: var(--stone); font-family: Arial, sans-serif; padding: 0 16px 8px; }
-  .trail-list{ flex:1; overflow-y:auto; padding: 4px 0 16px; }
+  .trail-list{ padding: 4px 0 16px; }
   .hub-group{ border-bottom: 1px solid #eceee4; }
   .hub-title{ padding: 10px 16px 4px; font-family: Arial, sans-serif; font-size: 11px; text-transform: uppercase;
     letter-spacing: .6px; color: var(--rust); font-weight: 700; cursor:pointer; }
@@ -166,7 +173,7 @@
   .place-label-tooltip::before{ display:none; }
 
   #locateBtn{
-    display:none; position:absolute; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); right:16px; z-index:1000;
+    display:none; position:absolute; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); right: calc(16px + env(safe-area-inset-right, 0px)); z-index:1000;
     width:46px; height:46px; border-radius:50%;
     background: rgba(255,255,255,0.97); border:1px solid #d8ddd0;
     box-shadow: 0 3px 10px rgba(0,0,0,0.2);
@@ -198,7 +205,7 @@
     100% { transform: scale(3.2); opacity:0; }
   }
   #liveStatus{
-    display:none; position:absolute; top:16px; left:50%; transform:translateX(-50%); z-index:1500;
+    display:none; position:absolute; top: calc(16px + env(safe-area-inset-top, 0px)); left:50%; transform:translateX(-50%); z-index:1500;
     background: rgba(28,38,32,0.92); color:#f2f3ec; font-family: Arial, sans-serif; font-size:12.5px; font-weight:600;
     padding:6px 14px; border-radius:16px; box-shadow:0 3px 10px rgba(0,0,0,0.25); align-items:center; gap:6px;
   }
@@ -208,16 +215,23 @@
   }
   @keyframes recBlink{ 0%,100%{ opacity:1; } 50%{ opacity:0.25; } }
   #layerWarning{
-    position:absolute; bottom:16px; left:16px; z-index:1000;
+    position:absolute;
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    left: calc(16px + env(safe-area-inset-left, 0px));
+    z-index:1000;
     background: rgba(28,38,32,0.92); color:#f2f3ec; font-family: Arial, sans-serif; font-size: 12px;
     padding: 8px 12px; border-radius: 8px; max-width: 300px; display:none; line-height:1.4;
   }
   #layerWarning.visible{ display:block; }
 
   #offlineBanner{
-    display:none; position:absolute; top:16px; right:16px; z-index:1500;
-    background: rgba(194,59,48,0.95); color:#fff; font-family: Arial, sans-serif; font-size:12.5px; font-weight:600;
-    padding:6px 14px; border-radius:16px; box-shadow:0 3px 10px rgba(0,0,0,0.25);
+    display:none; position:absolute;
+    top: calc(16px + env(safe-area-inset-top, 0px));
+    right: calc(16px + env(safe-area-inset-right, 0px));
+    z-index:1500;
+    max-width: 150px;
+    background: rgba(194,59,48,0.95); color:#fff; font-family: Arial, sans-serif; font-size:11.5px; font-weight:600;
+    padding:6px 10px; border-radius:12px; box-shadow:0 3px 10px rgba(0,0,0,0.25); line-height:1.35;
   }
   #offlineBanner.visible{ display:block; }
   #preloadBtn{
@@ -254,6 +268,21 @@
       display:flex;
       bottom: calc(16px + env(safe-area-inset-bottom, 0px) + 54px);
     }
+  }
+  @media (display-mode: standalone){
+    #infoPanel{
+      bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    }
+    #locateBtn{
+      bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    }
+  }
+  @media (orientation: landscape) and (max-height: 500px){
+    #infoPanel{
+      max-height: min(60vh, 170px);
+      max-width: min(60vw, 340px);
+    }
+    .ele-chart{ height:36px; }
   }
 </style>
 </head>
@@ -307,7 +336,7 @@
         <div id="ipContent"></div>
       </div>
       <div id="layerWarning"></div>
-      <div id="offlineBanner">📴 Offline — es werden nur bereits geladene Kartenausschnitte angezeigt</div>
+      <div id="offlineBanner">📴 Offline-Modus</div>
     </div>
   </div>
 </div>
@@ -494,6 +523,12 @@ function updateHeadingCone(headingDeg){
   wrap.style.transform = `rotate(${headingDeg}deg)`;
 }
 
+function getScreenAngle(){
+  if (screen.orientation && typeof screen.orientation.angle === "number") return screen.orientation.angle;
+  if (typeof window.orientation === "number") return window.orientation;
+  return 0;
+}
+
 function handleOrientation(event){
   let heading = null;
   if (typeof event.webkitCompassHeading === "number" && !isNaN(event.webkitCompassHeading)) {
@@ -502,6 +537,9 @@ function handleOrientation(event){
     heading = 360 - event.alpha; // Android absolute orientation: alpha is counter-clockwise from North
   }
   if (heading === null || isNaN(heading)) return;
+  // The sensor reports heading relative to the device's physical (portrait) top, not the
+  // current screen orientation — correct for landscape rotation so "up" on screen is right.
+  heading = (heading - getScreenAngle() + 360) % 360;
   heading = (heading + 360) % 360;
 
   if (smoothedCompassHeading === null) {
