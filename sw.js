@@ -36,7 +36,7 @@ self.addEventListener("fetch", (event) => {
       fetch(req)
         .then((resp) => {
           const clone = resp.clone();
-          caches.open(CACHE_NAME).then((c) => c.put(req, clone));
+          event.waitUntil(caches.open(CACHE_NAME).then((c) => c.put(req, clone)));
           return resp;
         })
         .catch(() => caches.match(req).then((cached) => cached || caches.match("./index.html")))
@@ -53,7 +53,12 @@ self.addEventListener("fetch", (event) => {
         .then((resp) => {
           if (resp && (resp.ok || resp.type === "opaque")) {
             const clone = resp.clone();
-            caches.open(CACHE_NAME).then((c) => c.put(req, clone));
+            // IMPORTANT: event.waitUntil keeps this fetch event (and the worker) alive
+            // until the cache write actually finishes. Without it, the browser can
+            // recycle the service worker right after resp is returned, silently
+            // killing the cache.put() before it completes — especially likely when
+            // many tiles are being fetched concurrently (like during preload).
+            event.waitUntil(caches.open(CACHE_NAME).then((c) => c.put(req, clone)));
           }
           return resp;
         })
