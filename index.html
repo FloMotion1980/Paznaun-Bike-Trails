@@ -1134,7 +1134,7 @@ preloadBtn.addEventListener("click", async () => {
   // just the narrow trail corridors.
   const viewBounds = map.getBounds();
   const curZoom = map.getZoom();
-  const viewZooms = [curZoom - 1, curZoom, curZoom + 1, curZoom + 2].filter(z => z >= 0 && z <= 19);
+  const viewZooms = [curZoom - 1, curZoom, curZoom + 1].filter(z => z >= 0 && z <= 19);
   viewZooms.forEach(z => {
     const nw = map.project(viewBounds.getNorthWest(), z).divideBy(256).floor();
     const se = map.project(viewBounds.getSouthEast(), z).divideBy(256).floor();
