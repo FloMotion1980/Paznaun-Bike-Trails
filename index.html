@@ -210,6 +210,7 @@
     padding:6px 14px; border-radius:16px; box-shadow:0 3px 10px rgba(0,0,0,0.25); align-items:center; gap:6px;
   }
   #liveStatus.visible{ display:flex; }
+  #headingDebug{ font-weight:400; color:#c7d0c4; font-family: monospace; font-size:11px; }
   #liveStatus .rec-dot{
     width:8px; height:8px; border-radius:50%; background:#e0392b; animation: recBlink 1.2s ease-in-out infinite;
   }
@@ -277,11 +278,17 @@
   }
   @media (orientation: landscape) and (max-height: 500px){
     #infoPanel{
+      top: calc(70px + env(safe-area-inset-top, 0px)) !important;
+      right: calc(16px + env(safe-area-inset-right, 0px)) !important;
       bottom: calc(16px + env(safe-area-inset-bottom, 0px)) !important;
-      max-height: min(70vh, 190px);
-      max-width: min(55vw, 340px);
+      left: auto !important;
+      transform: none !important;
+      width: min(46vw, 300px) !important;
+      max-width: none !important;
+      max-height: none !important;
+      overflow-y: auto;
     }
-    .ele-chart{ height:36px; }
+    .ele-chart{ height:40px; }
   }
 </style>
 </head>
@@ -329,7 +336,7 @@
       <div id="map"></div>
       <button id="sidebarToggle">☰ Trails</button>
       <button id="locateBtn" title="Mein Standort">📍</button>
-      <div id="liveStatus"><span class="rec-dot"></span> Live-Tracking</div>
+      <div id="liveStatus"><span class="rec-dot"></span> Live-Tracking <span id="headingDebug"></span></div>
       <div id="infoPanel">
         <button class="ip-close" id="ipClose" title="Schließen">&times;</button>
         <div id="ipContent"></div>
@@ -539,6 +546,7 @@ function handleOrientation(event){
     heading = 360 - event.alpha; // Android absolute orientation: alpha is counter-clockwise from North
   }
   if (heading === null || isNaN(heading)) return;
+  const rawHeadingForDebug = heading;
   // The sensor reports heading relative to the device's physical (portrait) top, not the
   // current screen orientation — correct for landscape rotation so "up" on screen is right.
   heading = (heading + getScreenAngle() + 360) % 360;
@@ -557,6 +565,12 @@ function handleOrientation(event){
   }
   compassActive = true;
   updateHeadingCone(compassDisplayAngle);
+
+  const dbg = document.getElementById("headingDebug");
+  if (dbg) {
+    const mod = ((compassDisplayAngle % 360) + 360) % 360;
+    dbg.textContent = `(roh: ${Math.round(rawHeadingForDebug)}° · Bildschirmwinkel: ${getScreenAngle()}° · korrigiert: ${Math.round(heading)}° · gerendert: ${mod.toFixed(1)}°)`;
+  }
 }
 
 function attachOrientationListener(){
@@ -584,6 +598,8 @@ function detachOrientationListener(){
     window.removeEventListener("deviceorientation", orientationHandler);
     orientationHandler = null;
   }
+  const dbg = document.getElementById("headingDebug");
+  if (dbg) dbg.textContent = "";
   compassActive = false;
   smoothedCompassHeading = null;
   compassDisplayAngle = null;
@@ -622,8 +638,8 @@ function updateUserLocation(pos, isFirstFix){
       if (cone) cone.style.display = "none";
     }
   }
-  if (isFirstFix) map.flyTo(latlng, 15, { duration: 0.8 });
-  else if (followMode) map.panTo(latlng, { animate: true, duration: 0.5 });
+  if (isFirstFix) map.flyTo(getOffsetCenter(L.latLng(latlng), 15), 15, { duration: 0.8 });
+  else if (followMode) map.panTo(getOffsetCenter(L.latLng(latlng), map.getZoom()), { animate: true, duration: 0.5 });
 }
 
 let wakeLock = null;
@@ -950,13 +966,32 @@ function selectCardFor(id){
   selectTrail(id, layer ? layer.card : null);
 }
 
+function isLandscapeShort(){
+  return window.matchMedia("(orientation: landscape) and (max-height: 500px)").matches;
+}
+
 function getFlyPadding(){
+  if (isLandscapeShort()) {
+    // landscape phone: info panel docks on the right, so reserve space there instead of at the bottom
+    return { paddingTopLeft: L.point(20, 70), paddingBottomRight: L.point(320, 20) };
+  }
   if (isMobileLayout()) {
-    // mobile: info panel + locate button sit near the bottom, sidebar is an overlay (closed)
+    // mobile portrait: info panel + locate button sit near the bottom, sidebar is an overlay (closed)
     return { paddingTopLeft: L.point(20, 70), paddingBottomRight: L.point(20, 240) };
   }
   // desktop: info panel sits top-right
   return { paddingTopLeft: L.point(40, 80), paddingBottomRight: L.point(340, 40) };
+}
+
+// Adjust a target lat/lng so that, once centered in the map container, it visually lands
+// in the middle of the space that ISN'T covered by our floating UI (info panel etc.),
+// rather than the true geometric center of the whole container.
+function getOffsetCenter(latlng, zoom){
+  const pad = getFlyPadding();
+  const targetPoint = map.project(latlng, zoom);
+  const shiftX = (pad.paddingBottomRight.x - pad.paddingTopLeft.x) / 2;
+  const shiftY = (pad.paddingBottomRight.y - pad.paddingTopLeft.y) / 2;
+  return map.unproject(targetPoint.subtract([shiftX, shiftY]), zoom);
 }
 
 function flyToTrailBounds(bounds){
